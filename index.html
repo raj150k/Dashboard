@@ -1,0 +1,280 @@
+import requests
+import time
+import random
+import numpy as np
+from collections import deque, Counter
+from datetime import datetime, timezone, timedelta
+import threading
+import os
+import re
+import pickle
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+import bs4
+from flask import Flask, render_template_string, request, redirect, session
+
+app = Flask(__name__)
+app.secret_key = "secret123"
+
+# ================= PASSWORD SYSTEM =================
+PASSWORD_FILE = "passwords.pkl"
+
+def load_passwords():
+    if os.path.exists(PASSWORD_FILE):
+        with open(PASSWORD_FILE, "rb") as f:
+            return pickle.load(f)
+    return []
+
+password_list = load_passwords()
+
+# ================= LOGIN PAGE =================
+LOGIN_TEMPLATE = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login</title>
+    <style>
+        body {
+            background: #0f0f23;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial;
+        }
+        .box { text-align: center; }
+        img {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            margin-bottom: 10px;
+        }
+        input {
+            padding: 10px;
+            border-radius: 10px;
+            margin-top: 10px;
+            border: none;
+        }
+        button {
+            padding: 10px 20px;
+            margin-top: 10px;
+            border: none;
+            border-radius: 10px;
+            background: #4ecdc4;
+            cursor: pointer;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <img src="https://i.postimg.cc/SxDRn9m3/1000158710.jpg">
+
+    <div>
+        📢 PROMOTE BY 
+        <a href="https://t.me/raj150k" target="_blank" style="color:#4ecdc4;">
+            @raj150k
+        </a>
+    </div>
+
+    <form method="POST">
+        <div>PASSWORD :</div>
+        <input type="password" name="password" required>
+        <br>
+        <button>LOGIN</button>
+    </form>
+
+    {% if error %}
+    <div class="error">❎ Wrong Password</div>
+    {% endif %}
+</div>
+
+</body>
+</html>
+'''
+
+@app.route('/', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        pw = request.form.get('password')
+        if pw in password_list:
+            session['login'] = True
+            return redirect('/dashboard')
+        else:
+            return render_template_string(LOGIN_TEMPLATE, error=True)
+    return render_template_string(LOGIN_TEMPLATE)
+
+# ================= ORIGINAL CONFIG =================
+DKWIN_URL = "https://dkwin9.com/#/"
+BD_TIMEZONE = timezone(timedelta(hours=6))
+
+# ================= AI BRAIN =================
+class SuperAISignalBrain:
+    def __init__(self):
+        self.dkwin_results = deque(maxlen=2000)
+        self.dkwin_predictions = deque(maxlen=2000)
+        self.dkwin_periods = deque(maxlen=50)
+        self.dkwin_win_numbers = deque(maxlen=1000)
+        self.ai_accuracy = 50.0
+        self.consecutive_losses = 0
+        self.current_trend = "NEUTRAL"
+        self.model_file = "dkwin_super_ai_brain.pkl"
+        self.dkwin_hot_numbers = Counter()
+        self.dkwin_cold_numbers = Counter()
+        self.dkwin_momentum = 0
+        self.self_correction_active = False
+        self.dkwin_ml_model = RandomForestClassifier(n_estimators=100, random_state=42)
+        self.dkwin_label_encoder = LabelEncoder()
+        self.dkwin_model_trained = False
+        self.load_brain()
+
+    def load_brain(self):
+        if os.path.exists(self.model_file):
+            try:
+                with open(self.model_file, 'rb') as f:
+                    data = pickle.load(f)
+                    self.__dict__.update(data)
+                self.dkwin_model_trained = True
+            except:
+                pass
+
+    def save_brain(self):
+        data = {
+            'dkwin_results': list(self.dkwin_results),
+            'dkwin_predictions': list(self.dkwin_predictions),
+            'dkwin_periods': list(self.dkwin_periods),
+            'dkwin_win_numbers': list(self.dkwin_win_numbers),
+            'ai_accuracy': self.ai_accuracy,
+            'consecutive_losses': self.consecutive_losses,
+            'current_trend': self.current_trend,
+            'dkwin_hot_numbers': dict(self.dkwin_hot_numbers),
+            'dkwin_cold_numbers': dict(self.dkwin_cold_numbers),
+            'dkwin_momentum': self.dkwin_momentum,
+            'self_correction_active': self.self_correction_active
+        }
+        with open(self.model_file, 'wb') as f:
+            pickle.dump(data, f)
+
+    def get_bangladesh_time(self):
+        return datetime.now(BD_TIMEZONE).strftime("%H:%M:%S")
+
+    def fetch_dkwin_wingo_30s(self):
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(DKWIN_URL, headers=headers, timeout=15)
+            soup = bs4.BeautifulSoup(response.text, 'html.parser')
+
+            results = []
+            periods = []
+
+            for elem in soup.find_all("td")[-50:]:
+                text = elem.get_text().upper()
+
+                if "BIG" in text:
+                    results.append("Big")
+                elif "SMALL" in text:
+                    results.append("Small")
+
+                num = re.findall(r'\d', text)
+                if num:
+                    self.dkwin_win_numbers.append(int(num[0]))
+
+            return results[-30:], periods[-10:], []
+
+        except:
+            return [], [], []
+
+    def sync_dkwin_data(self):
+        results, _, _ = self.fetch_dkwin_wingo_30s()
+        for r in results:
+            self.dkwin_results.append(r)
+        self.save_brain()
+
+    def predict(self):
+        self.sync_dkwin_data()
+        history = list(self.dkwin_results)
+
+        if len(history) < 10:
+            return random.choice(["Big", "Small"]), 70
+
+        big_count = history[-10:].count("Big")
+        prediction = "Big" if big_count > 5 else "Small"
+        confidence = 70 + abs(big_count - 5) * 3
+
+        return prediction, min(confidence, 99)
+
+ai_brain = SuperAISignalBrain()
+
+# ================= ORIGINAL HTML =================
+HTML_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DKWIN VIP AI Signals</title>
+<style>
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+    color: white;
+    text-align: center;
+    padding: 40px;
+}
+</style>
+</head>
+<body>
+
+<h1>🚀 DKWIN VIP AI DASHBOARD (ORIGINAL)</h1>
+
+<div id="prediction">Loading...</div>
+
+<script>
+async function load(){
+    let r = await fetch('/api/signal');
+    let d = await r.json();
+
+    document.getElementById('prediction').innerHTML =
+        d.prediction + " (" + d.confidence + "%)";
+}
+
+setInterval(load, 3000);
+load();
+</script>
+
+</body>
+</html>
+'''
+
+# ================= ROUTES =================
+@app.route('/dashboard')
+def dashboard():
+    if not session.get('login'):
+        return redirect('/')
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/api/signal')
+def get_signal():
+    p, c = ai_brain.predict()
+    return {
+        'prediction': p,
+        'confidence': c,
+        'time': ai_brain.get_bangladesh_time()
+    }
+
+# ================= BACKGROUND =================
+def update_brain():
+    while True:
+        ai_brain.sync_dkwin_data()
+        time.sleep(30)
+
+# ================= RUN =================
+if __name__ == '__main__':
+    threading.Thread(target=update_brain, daemon=True).start()
+    print("🚀 Running → http://localhost:5000")
+    app.run(host='0.0.0.0', port=5000)
